@@ -1,0 +1,103 @@
+# ============================================================================
+# UGOS Pro 应用清单 —— NasOC 编程终端
+# ============================================================================
+# 文档: https://developer.ugnas.com/doc/tools/project-yaml.html
+# 打包(在 NAS 上执行): ~/bin/ugcli pack --arch amd64 --build <N>
+#
+# 应用: NasOC —— 在浏览器/远程 App 中打开 NAS 终端进行 AI 编程
+#   - 每个 tab 一个项目目录（tmux 会话）
+#   - 关闭窗口/断开会话保留，重开即续；exit 或重启设备/容器才会结束会话
+#   - 内置 opencode 1.18.30（BigModel/GLM 端点配置见 /data/opencode-config）
+# ============================================================================
+
+spec_version: "2.1"
+
+app_id: "com.firewell.nasoc"
+
+version: "0.1.0"
+
+support_arch:
+  - amd64
+
+product_series:
+  - nasync
+
+supports:
+  - pc
+  - app
+
+is_docker_app: true
+
+only_admin: false
+
+# 容器内 sessiond 监听 8080，映射到宿主 12703（12702 已被 novelmgt 占用）
+port: 12703
+
+# tab = 桌面图标点击后浏览器新标签页直接访问 IP:端口（自带完整 web 服务）
+open_type: "tab"
+
+tag_types:
+  - utility
+  - devtool
+
+depend_fw_version: "1.13.0.0000"
+depend_docker_version: "20.10.0"
+
+support_migration: false
+allow_add_access_path: false
+
+# 使用开源代码时必填（ugcli 文档要求）
+# TODO: 仓库建好后替换为实际地址
+license_agreement_link:
+  - https://opensource.org/licenses/MIT
+source_code_link:
+  - https://github.com/firewelly/nasoc
+
+permissions:
+  - NETWORK.ACCESS_INTERNET
+
+# ── 安装时可配置项（注入 compose 变量）──
+parameters:
+  # 项目/工作目录（容器内按原路径挂载，路径与宿主一致）
+  - key: PATH
+    type: path
+    multi: true
+    required: true
+    i18n:
+      en-US:
+        name: Project Directories
+        description: Directories containing code projects, e.g. /volume1/projects (multiple allowed; mounted at the same path inside the container)
+      zh-CN:
+        name: 项目目录
+        description: 存放代码项目的目录，如 /volume1/projects（可配置多个；容器内按原路径挂载）
+
+  # 可选访问口令（UGREENlink 远程访问时建议设置）
+  - key: TERMINAL_PIN
+    type: password
+    required: false
+    changeable: true
+    i18n:
+      en-US:
+        name: Access PIN (optional)
+        description: If set, the terminal asks for this PIN (recommended when using remote/UGREENlink access). Leave empty to disable.
+      zh-CN:
+        name: 访问口令（可选）
+        description: 设置后打开终端需输入该口令（使用 UGREENlink 远程访问时建议设置）。留空表示不启用。
+
+i18n:
+  en-US:
+    name: "NasOC Terminal"
+    description: >-
+      Web terminal with the OpenCode AI coding agent on your NAS (OpenCode
+      included). One tab per project; sessions survive closing the window and
+      reconnect seamlessly (tmux). Ends on exit or device reboot. Port 12703.
+    author: firewell
+    publisher: firewell
+  zh-CN:
+    name: "NasOC 编程终端"
+    description: >-
+      在浏览器/远程 App 中打开 NAS 终端进行 AI 编程，内置 OpenCode。每个 tab
+      一个项目，关窗不中断、重开即续（tmux 持久会话），exit 或重启设备后结束。
+      端口 12703。
+    author: firewell
+    publisher: firewell

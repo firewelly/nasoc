@@ -1,0 +1,27 @@
+services:
+  app:
+    image: nasoc:0.1.0
+    container_name: nasoc
+    user: "1000:10"
+    restart: always
+    environment:
+      - TZ=${TZ}
+      - TERM_PIN=${TERMINAL_PIN}
+    ports:
+      - "12703:8080"
+    volumes:
+      # opencode 配置/认证/会话状态等持久数据（随应用升级保留）
+      - /volume2/docker/nasoc:/data
+      # 项目/工作目录：安装时按原路径挂载进容器（路径与宿主一致）
+      - ${PATH}
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8080/api/health', timeout=5)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

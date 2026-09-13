@@ -1,0 +1,9 @@
+" nasoc 容器 vim 全局配置（Debian 会加载 /etc/vim/vimrc 后再加载 vimrc.local）
+" 中文与编码（locale 已是 zh_CN.UTF-8，这里显式兜底）
+set encoding=utf-8
+set fileencodings=utf-8,gbk,gb2312,big5,latin1
+" 终端体验
+set mouse=a
+set backspace=indent,eol,start
+set history=200
+syntax on

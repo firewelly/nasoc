@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>NasOC terminal</title>
+<link rel="stylesheet" href="/vendor/xterm.css">
+<style>
+  html,body{height:100%;margin:0;background:#000;}
+  #term{width:100%;height:100%;padding:4px;}
+  #overlay{
+    position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+    background:rgba(0,0,0,.65);color:#e6e6ea;font:14px -apple-system,sans-serif;
+    flex-direction:column;gap:10px;cursor:pointer;z-index:10;
+  }
+  #overlay .btn{border:1px solid #4da3ff;color:#4da3ff;padding:7px 18px;border-radius:8px;}
+</style>
+</head>
+<body>
+<div id="term"></div>
+<div id="overlay"><div id="ovmsg">连接已断开</div><div class="btn">重新连接</div></div>
+<script src="/vendor/xterm.js"></script>
+<script src="/vendor/addon-fit.js"></script>
+<script>
+"use strict";
+const qs = new URLSearchParams(location.search);
+const session = qs.get("session") || "main";
+const path = qs.get("path") || "";
+const pin = qs.get("pin") || "";
+
+const term = new Terminal({
+  fontFamily: '"SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace',
+  fontSize: 14,
+  theme: {
+    background: "#101014",
+    foreground: "#e6e6ea",
+    cursor: "#4da3ff",
+    selectionBackground: "#2a4d69",
+    black: "#1e1e26", red: "#e05555", green: "#3fb96b", yellow: "#d6a24a",
+    blue: "#4da3ff", magenta: "#c678dd", cyan: "#56b6c2", white: "#e6e6ea",
+    brightBlack: "#8a8a96", brightRed: "#ff7a7a", brightGreen: "#5fd68a",
+    brightYellow: "#f0bc6c", brightBlue: "#78bfff", brightMagenta: "#d894ea",
+    brightCyan: "#7cd4de", brightWhite: "#ffffff"
+  },
+  scrollback: 5000,
+  cursorBlink: true,
+  allowProposedApi: true
+});
+const fit = new FitAddon.FitAddon();
+term.loadAddon(fit);
+term.open(document.getElementById("term"));
+fitAddonFit();
+window.addEventListener("resize", fitAddonFit);
+
+function fitAddonFit(){
+  try { fit.fit(); sendResize(); } catch(e){}
+}
+
+let ws = null, closed = false, retry = 0, pingTimer = null;
+
+function wsURL(){
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  let u = proto + "://" + location.host + "/ws/" + encodeURIComponent(session) +
+          "?cols=" + term.cols + "&rows=" + term.rows;
+  if (path) u += "&path=" + encodeURIComponent(path);
+  if (pin) u += "&pin=" + encodeURIComponent(pin);
+  return u;
+}
+
+function connect(){
+  closed = false;
+  overlay(false, "连接中…");
+  ws = new WebSocket(wsURL());
+  ws.binaryType = "arraybuffer";
+
+  ws.onopen = () => {
+    retry = 0;
+    overlay(false);
+    sendResize();
+    pingTimer = setInterval(() => {
+      try{ ws.send(JSON.stringify({ping: 1})); }catch(e){}
+    }, 30000);
+  };
+  ws.onmessage = ev => {
+    if (ev.data instanceof ArrayBuffer) term.write(new Uint8Array(ev.data));
+    else term.write(ev.data);
+  };
+  ws.onclose = () => {
+    clearInterval(pingTimer);
+    if (closed) return;
+    retry++;
+    if (retry > 6){ overlay(true, "连接已断开"); return; }
+    overlay(false, "重连中 (" + retry + ")…");
+    setTimeout(connect, Math.min(retry * 1200, 5000));
+  };
+  ws.onerror = () => { try{ ws.close(); }catch(e){} };
+}
+
+function sendResize(){
+  if (ws && ws.readyState === 1){
+    ws.send(JSON.stringify({resize: [term.cols, term.rows]}));
+  }
+}
+
+const enc = new TextEncoder();
+term.onData(data => {
+  // 键盘输入用二进制帧（文本帧保留给控制消息）
+  if (ws && ws.readyState === 1) ws.send(enc.encode(data));
+});
+
+term.onResize(() => sendResize());
+
+function overlay(show, msg){
+  const ov = document.getElementById("overlay");
+  ov.style.display = show ? "flex" : "none";
+  if (msg) document.getElementById("ovmsg").textContent = msg;
+}
+document.getElementById("overlay").addEventListener("click", () => {
+  retry = 0; connect();
+});
+
+connect();
+</script>
+</body>
+</html>
