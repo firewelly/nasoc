@@ -13,6 +13,12 @@ ROOT="$(dirname "$SRC_DIR")"          # ~/nasoc-src/（含 core/ vendor/）
 UGCLI="$HOME/bin/ugcli"
 VERSION=$(grep -E '^version:' "$SRC_DIR/project.yaml" | awk '{print $2}' | tr -d '"')
 
+echo "==> [0/4] 存储自检（构建产物勿落 eMMC/系统盘）"
+df -h "$ROOT" | tail -1
+if [ "$(df -P "$ROOT" | awk 'NR==2{print $6}')" = "/" ]; then
+  echo "    ⚠️ 警告: 构建目录位于系统盘（/）——建议放到数据卷（如 /volume2/docker/nasoc-build）"
+fi
+
 echo "==> [1/4] docker build nasoc:${VERSION}（上下文=$ROOT）"
 docker build -f "$ROOT/core/Dockerfile" -t "nasoc:${VERSION}" "$ROOT"
 

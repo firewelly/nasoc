@@ -1,0 +1,76 @@
+#!/bin/bash
+# ===================================================================
+# nasoc-update —— 升级 opencode 及插件依赖（在 NasOC 终端里直接运行）
+#
+# 用法:
+#   nasoc-update            # 升级到最新版
+#   nasoc-update 1.18.30    # 安装指定版本（回滚/测试用）
+#
+# 机制: 新二进制装到 /data/bin/opencode（持久卷，随应用升级保留）。
+#       镜像内的 /usr/local/bin/opencode 是包装脚本，自动优先执行 /data/bin 版本，
+#       因此所有调用方式（含旧会话）都用新版；整包升级 NasOC 亦不丢。
+# 网络: 优先 npm 镜像直连（国内快）；失败回退官方源（走 HP_PROXY 若已配置）
+# ===================================================================
+set -e
+
+REG_CN="https://registry.npmmirror.com"
+REG_INTL="https://registry.npmjs.org"
+PKG="opencode-linux-x64"
+DATA_BIN="/data/bin"
+TARGET="${1:-}"
+
+mkdir -p "$DATA_BIN"
+
+latest_version() {
+  local v
+  v=$(curl -fsS -m 30 --noproxy '*' "$REG_CN/$PKG/latest" 2>/dev/null \
+      | python3 -c 'import json,sys;print(json.load(sys.stdin)["version"])' 2>/dev/null) \
+  || v=$(curl -fsS -m 30 "$REG_INTL/$PKG/latest" 2>/dev/null \
+      | python3 -c 'import json,sys;print(json.load(sys.stdin)["version"])' 2>/dev/null) \
+  || { echo ""; return 1; }
+  echo "$v"
+}
+
+cur=$(/usr/local/bin/opencode --version 2>/dev/null | head -1 || echo "none")
+if [ -z "$TARGET" ]; then
+  echo "当前版本: $cur"
+  TARGET=$(latest_version) || { echo "❌ 查询最新版失败（网络不通？）"; exit 1; }
+  [ -z "$TARGET" ] && { echo "❌ 查询最新版失败"; exit 1; }
+  if [ "$cur" = "$TARGET" ]; then
+    echo "✅ 已是最新版本 ($cur)"
+  fi
+fi
+
+if [ "$cur" != "$TARGET" ]; then
+  echo "目标版本: $TARGET — 下载中（约 180MB，视网速 1-5 分钟）..."
+  tmp=$(mktemp -d /tmp/nasoc-upd.XXXXXX)
+  trap 'rm -rf "$tmp"' EXIT
+  ok=0
+  curl -fsSL -m 900 --noproxy '*' -o "$tmp/oc.tgz" "$REG_CN/$PKG/-/$PKG-$TARGET.tgz" && ok=1
+  if [ "$ok" = "0" ]; then
+    echo "  国内镜像失败，尝试官方源..."
+    curl -fsSL -m 900 -o "$tmp/oc.tgz" "$REG_INTL/$PKG/-/$PKG-$TARGET.tgz" && ok=1
+  fi
+  [ "$ok" = "1" ] || { echo "❌ 下载失败（尝试过国内镜像与官方源）"; exit 1; }
+
+  tar xzf "$tmp/oc.tgz" -C "$tmp"
+  install -m 0755 "$tmp/package/bin/opencode" "$DATA_BIN/opencode.new"
+  "$DATA_BIN/opencode.new" --version >/dev/null 2>&1 || { echo "❌ 新二进制无法运行（架构不符？）"; exit 1; }
+  mv -f "$DATA_BIN/opencode.new" "$DATA_BIN/opencode"
+  echo "✅ opencode 已升级: $cur -> $(/usr/local/bin/opencode --version 2>/dev/null | head -1)"
+  echo "   （正在运行的 opencode 会话不受影响；新开会话即用新版）"
+fi
+
+# 插件依赖同步（有 node_modules 才做；直连镜像，不走代理）
+if [ -d /data/opencode-config/opencode/node_modules ]; then
+  echo "同步插件依赖..."
+  if (cd /data/opencode-config/opencode \
+      && env -u HTTP_PROXY -u HTTPS_PROXY -u http_proxy -u https_proxy \
+         npm install --registry="$REG_CN" --no-audit --no-fund >/dev/null 2>&1); then
+    echo "✅ 插件依赖已同步"
+  else
+    echo "⚠️ 插件依赖同步失败（不影响 opencode 本体，可稍后重试）"
+  fi
+fi
+
+echo "完成。当前版本: $(/usr/local/bin/opencode --version 2>/dev/null | head -1)"

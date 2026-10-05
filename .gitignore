@@ -6,3 +6,4 @@ build_dir/
 .DS_Store
 __pycache__/
 *.pyc
+store/

@@ -71,6 +71,27 @@ parameters:
         name: 项目目录
         description: 存放代码项目的目录，如 /volume1/projects（可配置多个；容器内按原路径挂载）
 
+  # 数据存储路径（SSD 优先，勿用系统盘/eMMC）
+  - key: DATA_PATH
+    type: path
+    required: true
+    changeable: false
+    i18n:
+      en-US:
+        name: Data Directory (SSD recommended)
+        description: >-
+          Persistent data for opencode config/auth and app state. Recommend an
+          SSD volume, e.g. /volume2/docker/nasoc (create subfolder under a
+          docker folder). Do NOT use the system disk / eMMC. Other volumes or
+          custom paths are allowed; a dedicated subfolder is recommended.
+      zh-CN:
+        name: 数据目录（建议选 SSD 卷）
+        description: >-
+          opencode 配置/凭据与应用状态的持久存储位置。建议选择 SSD 卷，
+          如 /volume2/docker/nasoc（在卷上建 docker 子目录存放）。
+          请勿使用系统盘/eMMC（容量小且影响寿命）；也可选其他数据卷或自定义路径，
+          建议使用独立子目录。
+
   # 可选访问口令（UGREENlink 远程访问时建议设置）
   - key: TERMINAL_PIN
     type: password

@@ -67,6 +67,17 @@ class ClientError(Exception):
     pass
 
 
+def opencode_version():
+    """当前 opencode 版本（供 /api/info 与升级前后对比）"""
+    try:
+        p = subprocess.run(["/usr/local/bin/opencode", "--version"],
+                           capture_output=True, timeout=20)
+        return p.stdout.decode("utf-8", "replace").strip().splitlines()[0] \
+            if p.returncode == 0 and p.stdout.strip() else "unknown"
+    except Exception:
+        return "unknown"
+
+
 # ----------------------------------------------------------------------------
 # tmux 封装
 # ----------------------------------------------------------------------------
@@ -490,7 +501,12 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"ok": True, "ts": int(time.time())})
             elif path == "/api/info":
                 valid = self.check_pin(query) if TERM_PIN else None
-                self.send_json({"pinRequired": bool(TERM_PIN), "valid": valid})
+                self.send_json({
+                    "pinRequired": bool(TERM_PIN),
+                    "valid": valid,
+                    "opencodeVersion": opencode_version(),
+                    "dataDir": "/data",
+                })
             elif path == "/api/sessions":
                 self.send_json({"sessions": list_sessions()})
             elif path == "/api/browse":
@@ -534,6 +550,22 @@ class Handler(BaseHTTPRequestHandler):
                     raise ClientError("会话已存在: %s" % name)
                 create_session(name, path)
                 self.send_json({"ok": True, "name": name, "path": path})
+            elif parsed.path == "/api/upgrade-opencode":
+                if not self.check_pin(query):
+                    self.send_json({"error": "需要访问口令"}, 401)
+                    return
+                before = opencode_version()
+                try:
+                    p = subprocess.run(["/usr/local/bin/nasoc-update"], capture_output=True,
+                                       timeout=900)
+                    out = (p.stdout.decode("utf-8", "replace")
+                           + p.stderr.decode("utf-8", "replace")).strip()
+                    rc = p.returncode
+                except subprocess.TimeoutExpired:
+                    out, rc = "升级超时（15 分钟）", 1
+                after = opencode_version()
+                self.send_json({"ok": rc == 0, "before": before, "after": after,
+                                "output": out[-4000:]})
             else:
                 self.send_json({"error": "not found"}, 404)
         except ClientError as e:

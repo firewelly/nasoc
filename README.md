@@ -9,6 +9,8 @@
 
 ## 功能
 
+- **应用内升级 opencode**：终端里输入 `update`（或点页面右上角「⬆ 升级 opencode」
+  按钮）即自动升级到最新版并同步插件依赖；**无需重新打包/安装 NasOC 整包**
 - **多项目多 Tab**：每个 Tab 绑定一个项目目录（tmux 会话），Tab 栏随时切换
 - **会话持久**：浏览器关掉会话不死，重开自动恢复并回放最近输出
 - **AI 编程**：内置 opencode（默认配置 GLM-5.2 / GLM-5.1，可自行改 provider）
@@ -45,6 +47,15 @@ cd src && bash build.sh 1        # 产物在 src/build_dir/pkgs/upk/
 单容器 `debian:12-slim`：**tmux（会话持久化）+ opencode + sessiond**
 （Python 标准库单进程：Tab 管理 UI + 会话 REST API + WebSocket↔PTY↔tmux 桥）。
 会话语义：关窗=detach 保留；`exit`=结束；容器/设备重启=清空。
+
+## 存储策略（勿落 eMMC）
+
+- 安装参数 **DATA_PATH**（必填）：opencode 配置/凭据与应用状态的持久目录。
+  **建议 SSD 卷**（如 `/volume2/docker/nasoc`），请勿选系统盘/eMMC；可选其他
+  数据卷或自定义路径（建议独立子目录）。
+- 容器入口会**自检**：若 /data 未挂载独立卷（与容器根同一文件系统）会打印警告，
+  避免"数据落在临时层、升级即丢"。
+- opencode 自升级的二进制存于 `<DATA_PATH>/bin/`（持久层），随应用升级保留。
 
 ## 授权
 

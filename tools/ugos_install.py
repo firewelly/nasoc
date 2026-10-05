@@ -87,9 +87,16 @@ def main():
     info = upload(args.upk, args.token)
 
     parameters = []
+    keys = set()
     for kv in args.param:
         k, _, v = kv.partition("=")
         parameters.append({"key": k, "value": v})
+        keys.add(k)
+    # 默认参数：数据目录（SSD 优先；可用 --param DATA_PATH=... 覆盖）
+    if "DATA_PATH" not in keys:
+        parameters.append({"key": "DATA_PATH", "value": "/volume2/docker/nasoc"})
+    if "PATH" not in keys:
+        parameters.append({"key": "PATH", "value": "/volume1"})
 
     payload = {
         "installPath": os.path.abspath(args.upk),

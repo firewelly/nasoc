@@ -11,7 +11,8 @@ services:
       - "12703:8080"
     volumes:
       # opencode 配置/认证/会话状态等持久数据（随应用升级保留）
-      - /volume2/docker/nasoc:/data
+      # DATA_PATH：安装参数；SSD 卷优先（如 /volume2/docker/nasoc），勿用系统盘/eMMC
+      - ${DATA_PATH}:/data
       # 项目/工作目录：安装时按原路径挂载进容器（路径与宿主一致）
       - ${PATH}
     healthcheck:

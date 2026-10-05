@@ -20,9 +20,17 @@ RUN sed -i "s|deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list.d/debian.sou
     && locale-gen \
     && rm -rf /var/lib/apt/lists/*
 
-# opencode 1.18.30（linux-x64 glibc 版，与 Debian 12 兼容）
-COPY vendor/bin/opencode /usr/local/bin/opencode
-RUN chmod 0755 /usr/local/bin/opencode
+# opencode（linux-x64 glibc 版，与 Debian 12 兼容）
+# 真实二进制放 /opt/opencode；/usr/local/bin/opencode 为包装脚本：
+# 优先执行持久层 /data/bin/opencode（由 update / nasoc-update 升级，随应用升级保留）
+COPY vendor/bin/opencode /opt/opencode/opencode
+RUN chmod 0755 /opt/opencode/opencode
+RUN printf '#!/bin/sh\nif [ -x /data/bin/opencode ]; then exec /data/bin/opencode "$@"; fi\nexec /opt/opencode/opencode "$@"\n' \
+      > /usr/local/bin/opencode && chmod 0755 /usr/local/bin/opencode
+
+# update / nasoc-update：容器内一键升级 opencode 及插件依赖
+COPY core/bin/nasoc-update core/bin/update /usr/local/bin/
+RUN chmod 0755 /usr/local/bin/nasoc-update /usr/local/bin/update
 
 # sessiond（tab UI + 会话 API + WebSocket→tmux 桥）与前端
 COPY core/sessiond.py /srv/sessiond.py

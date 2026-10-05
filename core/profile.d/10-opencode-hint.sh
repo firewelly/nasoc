@@ -12,6 +12,7 @@ if [ "$SHLVL" = "1" ] && [ -z "$OC_HINT_SHOWN" ]; then
   echo "│   opencode            启动 AI 编程助手 (GLM-5.2/5.1)     │"
   echo "│   vim / emacs         编辑器（中文支持已就绪）           │"
   echo "│   首次使用: opencode auth login 配置 API Key             │"
+  echo "│   升级 opencode: 输入 update（或页面右上角按钮）         │"
   echo "│   关闭浏览器页面会话保留；输入 exit 结束本会话           │"
   echo "└──────────────────────────────────────────────────────────┘"
 fi

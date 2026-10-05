@@ -1,0 +1,4 @@
+#!/bin/bash
+# update —— NasOC 内置升级命令：更新 opencode 及插件依赖
+# 等价于 nasoc-update；用法: update [版本号]
+exec /usr/local/bin/nasoc-update "$@"
