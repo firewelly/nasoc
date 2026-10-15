@@ -109,6 +109,37 @@ footer{
   background:var(--bg2); border-top:1px solid var(--bd);
   display:flex; justify-content:space-between; gap:10px;
 }
+/* 隐私政策弹窗样式 */
+#privacyOverlay{
+  position:fixed; inset:0; z-index:100; background:rgba(0,0,0,0.85);
+  display:flex; align-items:center; justify-content:center;
+}
+#privacyBox{
+  background:var(--bg2); border:1px solid var(--bd); border-radius:14px;
+  width:min(560px, 94vw); max-height:86vh; display:flex; flex-direction:column;
+}
+#privacyHead{
+  padding:16px 20px; border-bottom:1px solid var(--bd);
+  font-weight:600; font-size:16px; display:flex; justify-content:space-between; align-items:center;
+}
+#privacyBody{
+  padding:16px 20px; overflow-y:auto; flex:1; font-size:13px; line-height:1.7; color:var(--fg);
+}
+#privacyBody h3{margin:16px 0 8px; color:var(--acc); font-size:14px;}
+#privacyBody ul{margin:8px 0; padding-left:20px;}
+#privacyBody li{margin:6px 0;}
+#privacyBody a{color:var(--acc);}
+#privacyFoot{
+  padding:14px 20px; border-top:1px solid var(--bd);
+  display:flex; gap:12px; justify-content:center;
+}
+#privacyFoot button{
+  padding:10px 28px; border-radius:9px; font-size:14px; cursor:pointer;
+  border:1px solid var(--bd); background:var(--bg3); color:var(--fg);
+}
+#privacyFoot .agree{
+  background:var(--ok); border-color:var(--ok); color:#fff; font-weight:600;
+}
 .pinbar{
   position:absolute; inset:0; z-index:50; display:none;
   align-items:center; justify-content:center; background:var(--bg);
@@ -124,6 +155,50 @@ footer{
 </style>
 </head>
 <body>
+
+<!-- 隐私政策弹窗 -->
+<div id="privacyOverlay" style="display:none;">
+  <div id="privacyBox">
+    <div id="privacyHead">
+      <span>隐私政策与用户协议</span>
+    </div>
+    <div id="privacyBody">
+      <p><b>NasOC 编程终端</b> 是一款运行在您自有 NAS 设备上的本地编程工具。在使用前，请阅读并同意以下条款：</p>
+      
+      <h3>一、数据安全</h3>
+      <ul>
+        <li>本应用<b>没有开发者侧服务器</b>，所有数据存储在您的 NAS 设备本地</li>
+        <li>我们不上传、不收集、不分析任何用户个人信息或使用行为</li>
+        <li>您的代码、配置、凭据完全由您自己掌控</li>
+      </ul>
+      
+      <h3>二、第三方服务</h3>
+      <ul>
+        <li>AI 编程功能需由您自行配置第三方模型服务商的 API Key</li>
+        <li>与模型服务商的交互由您主动发起，相关数据政策以服务商条款为准</li>
+        <li>我们推荐使用已完成国家算法备案的正规服务商</li>
+      </ul>
+      
+      <h3>三、用户责任</h3>
+      <ul>
+        <li>请妥善保管您的 API Key 和访问口令</li>
+        <li>请遵守所在国家/地区的法律法规</li>
+        <li>请勿将本工具用于非法用途</li>
+      </ul>
+      
+      <p style="margin-top:16px;">
+        完整的隐私政策请查看：<a href="https://github.com/firewelly/nasoc/blob/main/PRIVACY.md" target="_blank">隐私政策全文</a>
+      </p>
+      <p style="color:var(--dim);font-size:12px;margin-top:12px;">
+        点击「同意并使用」即表示您已阅读并同意上述条款。
+      </p>
+    </div>
+    <div id="privacyFoot">
+      <button onclick="window.location.href='about:blank'">不同意</button>
+      <button class="agree" onclick="agreePrivacy()">同意并使用</button>
+    </div>
+  </div>
+</div>
 
 <header>
   <span class="logo"><b>&gt;_</b> NasOC</span>
@@ -184,6 +259,22 @@ let PIN = localStorage.getItem("oc_pin") || "";
 let openTabs = JSON.parse(localStorage.getItem("oc_tabs") || "[]"); // [{name,path}]
 let browsePath = "";
 let pollTimer = null;
+
+/* ---------- 隐私政策同意 ---------- */
+function checkPrivacyConsent(){
+  const consented = localStorage.getItem("nasoc_privacy_consent");
+  if (!consented) {
+    $("#privacyOverlay").style.display = "flex";
+    return false;
+  }
+  return true;
+}
+
+function agreePrivacy(){
+  localStorage.setItem("nasoc_privacy_consent", Date.now().toString());
+  $("#privacyOverlay").style.display = "none";
+  initApp();
+}
 
 function authQS(extra){
   const q = extra ? "&" + extra : "";
@@ -381,7 +472,7 @@ $("#newtab").addEventListener("click", newTabDialog);
 $("#pinInput").addEventListener("keydown", e => { if (e.key === "Enter") submitPin(); });
 $("#pName").addEventListener("keydown", e => { if (e.key === "Enter") createSession(); });
 
-(async function init(){
+async function initApp(){
   try{
     const info = await api("/api/info");
     if (info.pinRequired && !PIN){ needPin(); }
@@ -393,6 +484,13 @@ $("#pName").addEventListener("keydown", e => { if (e.key === "Enter") createSess
   if (openTabs.length) activateTab(openTabs[0].name); else showEmpty();
   refreshSessions();
   pollTimer = setInterval(refreshSessions, 4000);
+}
+
+// 入口：先检查隐私政策同意
+(function(){
+  if (checkPrivacyConsent()) {
+    initApp();
+  }
 })();
 </script>
 </body>

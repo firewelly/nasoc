@@ -47,11 +47,15 @@ support_migration: false
 allow_add_access_path: false
 
 # 使用开源代码时必填（ugcli 文档要求）
-# TODO: 仓库建好后替换为实际地址
 license_agreement_link:
   - https://opensource.org/licenses/MIT
 source_code_link:
   - https://github.com/firewelly/nasoc
+# 隐私政策 / 技术支持（审核要求：开发者/发布者跳转、技术支持字段）
+privacy_policy_link:
+  - https://github.com/firewelly/nasoc/blob/main/PRIVACY.md
+technical_support_link:
+  - https://github.com/firewelly/nasoc/issues
 
 permissions:
   - NETWORK.ACCESS_INTERNET
@@ -111,14 +115,23 @@ i18n:
     description: >-
       Web terminal with the OpenCode AI coding agent on your NAS (OpenCode
       included). One tab per project; sessions survive closing the window and
-      reconnect seamlessly (tmux). Ends on exit or device reboot. Port 12703.
+      reconnect seamlessly (tmux). OpenCode can be upgraded in-app (update
+      command / button); data stays on an SSD volume you choose. Ends on exit
+      or device reboot. Port 12703.
     author: firewell
+    official: https://github.com/firewelly/nasoc
+    help: https://github.com/firewelly/nasoc#readme
     publisher: firewell
+    publisher_link: https://github.com/firewelly
   zh-CN:
     name: "NasOC 编程终端"
     description: >-
       在浏览器/远程 App 中打开 NAS 终端进行 AI 编程，内置 OpenCode。每个 tab
-      一个项目，关窗不中断、重开即续（tmux 持久会话），exit 或重启设备后结束。
-      端口 12703。
+      一个项目，关窗不中断、重开即续（tmux 持久会话）；opencode 可在应用内
+      一键升级（update 命令/界面按钮），数据存放于您指定的 SSD 卷。输入 exit
+      或重启设备后结束会话。端口 12703。
     author: firewell
+    official: https://github.com/firewelly/nasoc
+    help: https://github.com/firewelly/nasoc#使用手册
     publisher: firewell
+    publisher_link: https://github.com/firewelly

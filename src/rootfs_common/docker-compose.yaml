@@ -2,7 +2,8 @@ services:
   app:
     image: nasoc:0.1.0
     container_name: nasoc
-    user: "1000:10"
+    # 以 root 启动：entrypoint 校正数据目录属主后降权到 1000:10 运行
+    # （修复：Docker 自动创建的 DATA_PATH 目录属 root，1000 不可写导致启用失败）
     restart: always
     environment:
       - TZ=${TZ}

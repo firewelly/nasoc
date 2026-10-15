@@ -63,4 +63,12 @@ EOF
 fi
 
 echo "[nasoc] starting sessiond on :8080 (opencode $(opencode --version 2>/dev/null || echo 'n/a'))"
+
+# ── 降权运行：Docker 自动创建的挂载目录属 root，容器用户 1000 不可写 ──
+# 以 root 进入时先校正 /data 属主，再以 1000:10 运行 sessiond（tmux/终端同 uid）
+if [ "$(id -u)" = "0" ]; then
+  chown -R 1000:10 "$DATA" 2>/dev/null || true
+  echo "[nasoc] 已校正 $DATA 属主（1000:10），降权运行"
+  exec setpriv --reuid=1000 --regid=10 --clear-groups python3 /srv/sessiond.py
+fi
 exec python3 /srv/sessiond.py
