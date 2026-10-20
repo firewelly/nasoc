@@ -47,8 +47,10 @@ support_migration: false
 allow_add_access_path: false
 
 # 使用开源代码时必填（ugcli 文档要求）
+# 2026-10-19 审核意见：链接须含具体版权人信息（opensource.org 版为占位符模板）
+# → 改指仓库 LICENSE 页（标准 MIT 全文 + Copyright (c) 2026 firewell）
 license_agreement_link:
-  - https://opensource.org/licenses/MIT
+  - https://github.com/firewelly/nasoc/blob/main/LICENSE
 source_code_link:
   - https://github.com/firewelly/nasoc
 # 隐私政策 / 技术支持（审核要求：开发者/发布者跳转、技术支持字段）
