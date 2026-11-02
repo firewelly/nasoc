@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""最小 WS 客户端：测试 sessiond 的 /ws 桥（RFC6455 客户端实现）"""
+"""最小 WS 客户端：测试 sessiond 的 /ws 桥（RFC6455 客户端实现）
+鉴权：口令经 X-OC-PIN 请求头（不再支持 URL ?pin= 查询参数）"""
 import base64, hashlib, json, os, secrets, socket, struct, sys, time
 
 HOST = os.environ.get("OC_TEST_HOST", "127.0.0.1")
@@ -9,9 +10,10 @@ PIN = os.environ.get("OC_TEST_PIN", "")
 def ws_connect(path):
     s = socket.create_connection((HOST, PORT), timeout=10)
     key = base64.b64encode(secrets.token_bytes(16)).decode()
+    pin_h = f"X-OC-PIN: {PIN}\r\n" if PIN else ""
     req = (f"GET {path} HTTP/1.1\r\nHost: {HOST}:{PORT}\r\n"
            f"Upgrade: websocket\r\nConnection: Upgrade\r\n"
-           f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n")
+           f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n{pin_h}\r\n")
     s.sendall(req.encode())
     buf = b""
     while b"\r\n\r\n" not in buf:
@@ -88,8 +90,7 @@ def expect(tag, cond):
     return cond
 
 # ---- 1. 连接 + 输出 ----
-pin_q = f"&pin={PIN}" if PIN else ""
-s, rest = ws_connect(f"/ws/demo{pin_q}")
+s, rest = ws_connect("/ws/demo")
 out = drain(s, 2.5)
 expect("连接后有输出（提示符/banner）", len(out) > 0)
 
@@ -107,11 +108,13 @@ expect("resize 控制帧无异常（连接仍活）", True)
 s.close()
 time.sleep(1.0)
 import urllib.request
-lst = json.load(urllib.request.urlopen(f"http://{HOST}:{PORT}/api/sessions?pin={PIN}"))
+req = urllib.request.Request(f"http://{HOST}:{PORT}/api/sessions",
+                             headers={"X-OC-PIN": PIN} if PIN else {})
+lst = json.load(urllib.request.urlopen(req))
 expect("断开后 tmux 会话保留", any(x["name"] == "demo" for x in lst["sessions"]))
 
 # ---- 5. 重连 → 能继续用（replay + 新命令） ----
-s2, rest2 = ws_connect(f"/ws/demo{pin_q}")
+s2, rest2 = ws_connect("/ws/demo")
 out = drain(s2, 2.5)
 send_frame(s2, 0x2, b"echo after-reconnect-$USER\r")
 out2 = drain(s2, 2.0)
@@ -127,7 +130,9 @@ except Exception:
     pass
 s2.close()
 time.sleep(1.0)
-lst = json.load(urllib.request.urlopen(f"http://{HOST}:{PORT}/api/sessions?pin={PIN}"))
+req = urllib.request.Request(f"http://{HOST}:{PORT}/api/sessions",
+                             headers={"X-OC-PIN": PIN} if PIN else {})
+lst = json.load(urllib.request.urlopen(req))
 expect("exit 后会话消失", not any(x["name"] == "demo" for x in lst["sessions"]))
 
 print("\n测试完成")

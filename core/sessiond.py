@@ -13,7 +13,10 @@ sessiond —— nasoc 的后端服务（纯标准库）。
 约定：
   - 会话名：[A-Za-z0-9._-]{1,40}
   - 工作目录：必须位于 /volume* 或 /home 下（compose 已按原路径挂载）
-  - 可选访问口令：环境变量 TERM_PIN，非空时 WS 与写操作要求 ?pin= 或 X-OC-PIN
+  - 可选访问口令：/data/.term_pin（0600，entrypoint 已将安装参数迁出环境变量；
+    回退 TERM_PIN 环境变量供本地开发）。启用时鉴权走 challenge-response 登录 +
+    HttpOnly Cookie 会话（WS 握手自动携带），或 X-OC-PIN 请求头（命令行工具）。
+    口令不再经 URL 查询参数传输（安全测试 2026-11-02 高危项修复）。
 """
 
 import base64
@@ -24,6 +27,7 @@ import json
 import os
 import pty
 import re
+import secrets
 import select
 import signal
 import socket
@@ -38,11 +42,29 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 WWW_DIR = "/srv/www"
 PORT = 8080
-TERM_PIN = os.environ.get("TERM_PIN", "").strip()
+PIN_FILE = "/data/.term_pin"
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$")
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
 ALLOWED_ROOTS = []
+
+
+def _load_pin():
+    """访问口令：优先读 0600 私有文件（凭据不驻留进程环境变量），
+    回退 TERM_PIN 环境变量（本地开发调试用）。"""
+    try:
+        with open(PIN_FILE, "r", encoding="utf-8") as f:
+            pin = f.read().strip()
+        if pin:
+            return pin
+    except OSError:
+        pass
+    return os.environ.get("TERM_PIN", "").strip()
+
+
+TERM_PIN = _load_pin()
+# 口令只以 SHA-256 摘要参与比对；明文不进 URL、不进日志、不以变量驻留服务进程
+PIN_HASH = hashlib.sha256(TERM_PIN.encode("utf-8")).hexdigest() if TERM_PIN else ""
 
 
 def _resolve_roots():
@@ -408,6 +430,76 @@ class PtyBridge(threading.Thread):
 
 
 # ----------------------------------------------------------------------------
+# 访问口令鉴权：challenge-response 登录 + HttpOnly Cookie 会话
+#   - 登录：GET /api/pin-challenge 取一次性 nonce（60s 有效），
+#           POST /api/pin-login 提交 sha256(nonce + sha256(PIN))——明文口令不出浏览器
+#   - 会话：登录成功下发随机 token 到 HttpOnly Cookie（30 天），浏览器后续
+#           请求（含 WebSocket 握手）自动携带；token 仅存服务端内存，重启即失效
+#   - 兼容：X-OC-PIN 请求头携带明文口令（命令行/测试工具）
+#   - 已移除 URL ?pin= 查询参数支持（2026-11-02 安全测试高危项）
+# ----------------------------------------------------------------------------
+
+AUTH_COOKIE = "oc_pin"
+TOKEN_TTL = 30 * 24 * 3600
+CHALLENGE_TTL = 60
+_auth_lock = threading.Lock()
+_tokens = {}       # 会话 token -> 过期时间戳（内存，重启即失效）
+_challenges = {}   # 一次性 nonce -> 过期时间戳
+
+
+def _prune_locked(now):
+    for d in (_tokens, _challenges):
+        for k in [k for k, exp in d.items() if exp < now]:
+            d.pop(k, None)
+
+
+def hash_pin(raw):
+    return hashlib.sha256((raw or "").encode("utf-8")).hexdigest()
+
+
+def issue_challenge():
+    now = time.time()
+    nonce = secrets.token_hex(16)
+    with _auth_lock:
+        _prune_locked(now)
+        _challenges[nonce] = now + CHALLENGE_TTL
+    return nonce
+
+
+def login(resp_hash, nonce):
+    """校验 challenge-response；成功返回会话 token，失败返回 None（轻微限速）"""
+    if not TERM_PIN:
+        return None
+    with _auth_lock:
+        exp = _challenges.pop(nonce if isinstance(nonce, str) else "", 0)
+    if not exp or exp < time.time():
+        time.sleep(0.6)  # 失败限速，抑制爆破
+        return None
+    expect = hashlib.sha256((nonce + PIN_HASH).encode("utf-8")).hexdigest()
+    if not secrets.compare_digest(resp_hash.lower(), expect):
+        time.sleep(0.6)
+        return None
+    token = secrets.token_hex(32)
+    with _auth_lock:
+        _prune_locked(time.time())
+        _tokens[token] = time.time() + TOKEN_TTL
+    return token
+
+
+def token_valid(token):
+    if not token:
+        return False
+    with _auth_lock:
+        exp = _tokens.get(token, 0)
+        if exp and exp >= time.time():
+            return True
+        _tokens.pop(token, None)
+    return False
+
+
+
+
+# ----------------------------------------------------------------------------
 # HTTP 服务
 # ----------------------------------------------------------------------------
 
@@ -432,19 +524,25 @@ class Handler(BaseHTTPRequestHandler):
     # -- 工具 --
 
     def check_pin(self, query=None):
+        """鉴权：HttpOnly Cookie 会话（浏览器，含 WS 握手自动携带）
+        或 X-OC-PIN 请求头（命令行工具）。不接受 URL 查询参数中的口令。"""
         if not TERM_PIN:
             return True
-        given = ""
-        if query:
-            given = (query.get("pin") or [""])[0]
-        if not given:
-            given = self.headers.get("X-OC-PIN", "")
-        return given == TERM_PIN
+        header_pin = self.headers.get("X-OC-PIN", "")
+        if header_pin:
+            return secrets.compare_digest(hash_pin(header_pin), PIN_HASH)
+        for part in self.headers.get("Cookie", "").split(";"):
+            k, _, v = part.strip().partition("=")
+            if k == AUTH_COOKIE:
+                return token_valid(v)
+        return False
 
-    def send_json(self, obj, code=200):
+    def send_json(self, obj, code=200, headers=None):
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
+        for k, v in (headers or {}).items():
+            self.send_header(k, v)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
@@ -499,8 +597,13 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if path == "/api/health":
                 self.send_json({"ok": True, "ts": int(time.time())})
+            elif path == "/api/pin-challenge":
+                if not TERM_PIN:
+                    self.send_json({"error": "未启用访问口令"}, 404)
+                    return
+                self.send_json({"nonce": issue_challenge()})
             elif path == "/api/info":
-                valid = self.check_pin(query) if TERM_PIN else None
+                valid = self.check_pin() if TERM_PIN else None
                 self.send_json({
                     "pinRequired": bool(TERM_PIN),
                     "valid": valid,
@@ -508,9 +611,12 @@ class Handler(BaseHTTPRequestHandler):
                     "dataDir": "/data",
                 })
             elif path == "/api/sessions":
+                if not self.check_pin():
+                    self.send_json({"error": "需要访问口令"}, 401)
+                    return
                 self.send_json({"sessions": list_sessions()})
             elif path == "/api/browse":
-                if not self.check_pin(query):
+                if not self.check_pin():
                     self.send_json({"error": "需要访问口令"}, 401)
                     return
                 target = (query.get("path") or [""])[0] or _default_root()
@@ -537,8 +643,22 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         query = urllib.parse.parse_qs(parsed.query)
         try:
-            if parsed.path == "/api/sessions":
-                if not self.check_pin(query):
+            if parsed.path == "/api/pin-login":
+                if not TERM_PIN:
+                    self.send_json({"error": "未启用访问口令"}, 404)
+                    return
+                body = self.read_body_json()
+                nonce = str(body.get("nonce", ""))
+                resp = str(body.get("response", ""))
+                token = login(resp, nonce)
+                if not token:
+                    self.send_json({"error": "口令不对，再试试"}, 401)
+                    return
+                cookie = ("%s=%s; Path=/; HttpOnly; SameSite=Strict; Max-Age=%d"
+                          % (AUTH_COOKIE, token, TOKEN_TTL))
+                self.send_json({"ok": True}, headers={"Set-Cookie": cookie})
+            elif parsed.path == "/api/sessions":
+                if not self.check_pin():
                     self.send_json({"error": "需要访问口令"}, 401)
                     return
                 body = self.read_body_json()
@@ -551,7 +671,7 @@ class Handler(BaseHTTPRequestHandler):
                 create_session(name, path)
                 self.send_json({"ok": True, "name": name, "path": path})
             elif parsed.path == "/api/upgrade-opencode":
-                if not self.check_pin(query):
+                if not self.check_pin():
                     self.send_json({"error": "需要访问口令"}, 401)
                     return
                 before = opencode_version()
@@ -573,9 +693,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_DELETE(self):
         parsed = urllib.parse.urlparse(self.path)
-        query = urllib.parse.parse_qs(parsed.query)
         if parsed.path.startswith("/api/sessions/"):
-            if not self.check_pin(query):
+            if not self.check_pin():
                 self.send_json({"error": "需要访问口令"}, 401)
                 return
             name = urllib.parse.unquote(parsed.path.rsplit("/", 1)[-1])
@@ -588,7 +707,7 @@ class Handler(BaseHTTPRequestHandler):
     # -- WebSocket --
 
     def handle_ws(self, encoded, query):
-        if not self.check_pin(query):
+        if not self.check_pin():
             try:
                 self.send_json({"error": "需要访问口令"}, 401)
             except OSError:

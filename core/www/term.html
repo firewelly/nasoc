@@ -26,7 +26,7 @@
 const qs = new URLSearchParams(location.search);
 const session = qs.get("session") || "main";
 const path = qs.get("path") || "";
-const pin = qs.get("pin") || "";
+// 访问口令不进 URL：鉴权由同源自动携带的 HttpOnly 会话 Cookie 完成
 
 const term = new Terminal({
   fontFamily: '"SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace',
@@ -63,7 +63,6 @@ function wsURL(){
   let u = proto + "://" + location.host + "/ws/" + encodeURIComponent(session) +
           "?cols=" + term.cols + "&rows=" + term.rows;
   if (path) u += "&path=" + encodeURIComponent(path);
-  if (pin) u += "&pin=" + encodeURIComponent(pin);
   return u;
 }
 

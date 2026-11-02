@@ -37,6 +37,16 @@ fi
 # 插件/MCP 依赖安装走国内镜像（未在 proxy.env 指定时生效）
 export NPM_CONFIG_REGISTRY="${NPM_CONFIG_REGISTRY:-https://registry.npmmirror.com}"
 
+# ── 访问口令迁出环境变量（安全修复 2026-11-02：env 明文凭据）──
+# 安装参数经 compose 以 TERM_PIN 环境变量进入容器；这里把口令落到
+# /data/.term_pin（0600，仅属主可读）后从环境中清除，sessiond 只读文件。
+if [ -n "${TERM_PIN:-}" ]; then
+  printf '%s' "$TERM_PIN" > "$DATA/.term_pin"
+  chmod 600 "$DATA/.term_pin"
+  unset TERM_PIN
+  echo "[nasoc] 访问口令已写入 $DATA/.term_pin（0600），已从环境变量清除"
+fi
+
 # opencode.json 不存在时生成默认配置（BigModel/GLM Coding Plan 端点）
 if [ ! -f "$XDG_CONFIG_HOME/opencode/opencode.json" ]; then
   mkdir -p "$XDG_CONFIG_HOME/opencode"
