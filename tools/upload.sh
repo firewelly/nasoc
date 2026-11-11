@@ -7,22 +7,26 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(dirname "$HERE")"                       # ugos_opencode/
+# 目标机：OC_HOST（ssh 别名或 IP），默认 dxp4800；也可指向 eq14 等备用打包机
 DEST_HOST="${OC_HOST:-dxp4800}"
 DEST_DIR='${HOME}/nasoc-src'
-PASS="${DXP4800_PASS:?需要 DXP4800_PASS 环境变量（SSH 密码）}"
+PASS="${OC_PASS:-${DXP4800_PASS:?需要 OC_PASS（或 DXP4800_PASS）环境变量（SSH 密码）}}"
 
 run_ssh() { sshpass -p "$PASS" ssh "$DEST_HOST" "$@"; }
 
 echo "==> 打包 core/ + src/（tar 流，排除垃圾文件）"
 cd "$ROOT"
-tar czf /tmp/oc-src.tgz --exclude='.DS_Store' --exclude='._*' \
+# COPYFILE_DISABLE=1 防 macOS bsdtar 把 AppleDouble(._*) 打进包（会污染 rootfs_common，
+# 导致 ugcli check 失败——--exclude='._*' 按全路径匹配不可靠，远端仍需兜底删除）
+COPYFILE_DISABLE=1 tar czf /tmp/oc-src.tgz --exclude='.DS_Store' \
         --exclude='__pycache__' --exclude='build_dir' \
         core src
 
 echo "==> 传输源码 → $DEST_HOST:nasoc-src/"
 run_ssh "mkdir -p nasoc-src"
 cat /tmp/oc-src.tgz | run_ssh "cat > nasoc-src/src.tgz"
-run_ssh "cd nasoc-src && rm -rf core src && tar xzf src.tgz && rm src.tgz"
+run_ssh "cd nasoc-src && rm -rf core src && tar xzf src.tgz && rm src.tgz && \
+         find . -name '._*' -delete 2>/dev/null; true"
 
 echo "==> 传输 opencode 二进制（~176MB gzip 流）"
 gzip -c vendor/bin/opencode | run_ssh "cat > nasoc-src/opencode.gz"
