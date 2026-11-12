@@ -26,7 +26,10 @@ echo "==> 传输源码 → $DEST_HOST:nasoc-src/"
 run_ssh "mkdir -p nasoc-src"
 cat /tmp/oc-src.tgz | run_ssh "cat > nasoc-src/src.tgz"
 run_ssh "cd nasoc-src && rm -rf core src && tar xzf src.tgz && rm src.tgz && \
-         find . -name '._*' -delete 2>/dev/null; true"
+         find . -name '._*' -delete 2>/dev/null; \
+         find core src -type d -exec chmod 755 {} + 2>/dev/null; \
+         find core src -type f -exec chmod 644 {} + 2>/dev/null; \
+         chmod 755 core/entrypoint.sh core/bin/* core/profile.d/*.sh 2>/dev/null; true"
 
 echo "==> 传输 opencode 二进制（~176MB gzip 流）"
 gzip -c vendor/bin/opencode | run_ssh "cat > nasoc-src/opencode.gz"

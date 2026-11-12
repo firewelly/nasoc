@@ -35,6 +35,11 @@ RUN chmod 0755 /usr/local/bin/nasoc-update /usr/local/bin/update
 # sessiond（tab UI + 会话 API + WebSocket→tmux 桥）与前端
 COPY core/sessiond.py /srv/sessiond.py
 COPY core/www /srv/www
+# 前端文件权限归一化（0644/0755）：源文件可能因 OneDrive 占位符等带 0700/0000——
+# 2026-11-12 教训：0700 随 COPY 进镜像 → 运行时 uid 1000 读不了 → 网关
+# "failed to forward request"（绿联测试 0012/0013 启动失败即此因，0014 修复）
+RUN chmod 0755 /srv/www /srv/www/vendor \
+    && chmod 0644 /srv/www/*.html /srv/www/vendor/*
 
 # 环境配置
 COPY core/tmux.conf /etc/tmux.conf
