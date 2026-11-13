@@ -70,7 +70,8 @@ PIN_HASH = hashlib.sha256(TERM_PIN.encode("utf-8")).hexdigest() if TERM_PIN else
 def _resolve_roots():
     roots = []
     for name in os.listdir("/"):
-        if re.match(r"^volume\d+$", name):
+        # UGOS Pro 卷为 /volume1…，飞牛 fnOS 卷为 /vol1…（2026-11-13 fnOS 实测）
+        if re.match(r"^(volume|vol)\d+$", name):
             roots.append("/" + name)
     if os.path.isdir("/home"):
         roots.append("/home")
